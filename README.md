@@ -37,7 +37,7 @@ Instructions :
   5) Should Consider doc string
 
 
- user:  Building embdding model using contrastive learning . MultiModal embedding model ( Image + Text)
+ user:  Building embedding model using contrastive learning . MultiModal embedding model ( Image + Text)
 
  Dataset Link and Description :
    Kaggle creadiential also settled up and
