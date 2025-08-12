@@ -11,6 +11,19 @@ agent = CodeAgent("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")
 
 ```
 
+### V2 & V3 
+
+
+```python
+from CodeAgentv=V2  import CodeAgent
+
+agent = CodeAgent(
+pplx_apikey:"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"
+)
+
+```
+
+
 ### Just Generate Using Prompt
 
 ```python
