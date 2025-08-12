@@ -1,133 +1,239 @@
 import os
 import subprocess
 import requests
-import time
-from typing import Optional, List
+import tempfile
+import re
+import autopep8
+from typing import Optional
+import threading
+
 
 class CodeAgent:
-    def __init__(self, apikey: str):
-        self.apikey = apikey
-        if not os.environ.get("PPLX_API_KEY"):
-            os.environ["PPLX_API_KEY"] = self.apikey
+    def __init__(self, pplx_apikey: Optional[str] = None, gemini_apikey: Optional[str] = None, provider: str = "perplexity"):
+        self.provider = provider.lower()
+        self.pplx_apikey = pplx_apikey
+        self.gemini_apikey = gemini_apikey
+
+        if self.pplx_apikey and not os.environ.get("PPLX_API_KEY"):
+            os.environ["PPLX_API_KEY"] = self.pplx_apikey
+        if self.gemini_apikey and not os.environ.get("GEMINI_API_KEY"):
+            os.environ["GEMINI_API_KEY"] = self.gemini_apikey
+
         os.makedirs("./outputs/", exist_ok=True)
 
     def generate(self, prompt: str) -> str:
-        """Send prompt to Perplexity API and return the raw response text."""
-        url = "https://api.perplexity.ai/chat/completions"
-        payload = {
-            "model": "sonar-pro",
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 50000
-        }
-        headers = {
-            "Authorization": f"Bearer {os.environ.get('PPLX_API_KEY')}",
-            "Content-Type": "application/json"
-        }
-
-        result = requests.post(url, json=payload, headers=headers)
-        try:
+        if self.provider == "perplexity":
+            url = "https://api.perplexity.ai/chat/completions"
+            payload = {
+                "model": "sonar-pro",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 50000
+            }
+            headers = {
+                "Authorization": f"Bearer {os.environ.get('PPLX_API_KEY')}",
+                "Content-Type": "application/json"
+            }
+            try:
+                result = requests.post(url, json=payload, headers=headers)
+                result.raise_for_status()
+            except requests.RequestException as e:
+                raise RuntimeError(f"Perplexity API request failed: {e}")
             data = result.json()
-        except Exception:
-            raise RuntimeError(f"API did not return valid JSON. Status: {result.status_code}, Text: {result.text}")
+            return data["choices"][0]["message"]["content"]
 
-        return data["choices"][0]["message"]["content"]
+        elif self.provider == "gemini":
+            url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={os.environ.get('GEMINI_API_KEY')}"
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+            headers = {"Content-Type": "application/json"}
+            try:
+                result = requests.post(url, json=payload, headers=headers)
+                result.raise_for_status()
+            except requests.RequestException as e:
+                raise RuntimeError(f"Gemini API request failed: {e}")
+            data = result.json()
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+
+        else:
+            raise ValueError("Unknown provider. Use 'perplexity' or 'gemini'.")
 
     def response_to_pycode(self, response: str) -> Optional[str]:
-        """Extract Python code from LLM markdown response."""
         start_marker = "```python"
         start_index = response.find(start_marker)
-        if start_index == -1:
-            return None
-        start_index += len(start_marker)
-        end_marker = "```"
-        end_index = response.find(end_marker, start_index)
-        if end_index == -1:
-            return response[start_index:].strip()
-        return response[start_index:end_index].strip()
+        if start_index != -1:
+            start_index += len(start_marker)
+            end_marker = "```"
+            end_index = response.find(end_marker, start_index)
+            if end_index != -1:
+                return response[start_index:end_index].strip()
 
-    def save_pyfile(self, code: str):
-        """Save code to pycode.py."""
-        with open("./outputs/pycode.py", "w") as f:
-            f.write(code)
+        start_marker = "```"
+        start_index = response.find(start_marker)
+        if start_index != -1:
+            start_index += len(start_marker)
+            end_index = response.find("```", start_index)
+            if end_index != -1:
+                return response[start_index:end_index].strip()
 
-    def run_code(self):
-        """Run pycode.py and stream stdout/stderr in real-time with monitoring."""
+        if response.strip():
+            return response.strip()
+        return None
+
+    def response_to_pyfile(self, response: str, filename: str = "./outputs/pycode.py"):
+        pycode = self.response_to_pycode(response)
+        if pycode is None:
+            raise ValueError("No python code block found in response.")
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(pycode)
+        print(f"[INFO] Saved extracted python code to {filename}")
+
+    @staticmethod
+    def split_into_cells(code: str):
+        """
+        Split Python code into logical cells while preserving decorators, docstrings,
+        and class/method blocks with indentation.
+        """
+        lines = code.splitlines()
+        cells = []
+        buffer = []
+        pending_decorators = []
+        in_block = False
+        base_indent = None
+        in_triple_quote = False
+        triple_quote_delim = None
+
+        for idx, line in enumerate(lines):
+            stripped = line.strip()
+
+            # Handle decorators
+            if stripped.startswith("@"):
+                pending_decorators.append(line)
+                continue
+
+            # Track triple quotes
+            if not in_triple_quote and (stripped.startswith('"""') or stripped.startswith("'''")):
+                triple_quote_delim = stripped[:3]
+                in_triple_quote = True
+            elif in_triple_quote and triple_quote_delim in stripped:
+                in_triple_quote = False
+
+            # Detect new block
+            is_block_start = bool(re.match(r'^(class |def |async def )', stripped))
+            if stripped.startswith("@dataclass") and idx + 1 < len(lines):
+                nxt = lines[idx + 1].lstrip()
+                if nxt.startswith("class "):
+                    pending_decorators.append(line)
+                    continue
+
+            if is_block_start and not in_block:
+                if buffer:
+                    cells.append("\n".join(buffer).strip())
+                    buffer = []
+                if pending_decorators:
+                    buffer.extend(pending_decorators)
+                    pending_decorators = []
+                buffer.append(line)
+                in_block = True
+                base_indent = len(line) - len(line.lstrip())
+                continue
+
+            if in_block:
+                current_indent = len(line) - len(line.lstrip())
+                if in_triple_quote or stripped == "" or current_indent > base_indent:
+                    buffer.append(line)
+                    continue
+                else:
+                    cells.append("\n".join(buffer).strip())
+                    buffer = []
+                    in_block = False
+                    base_indent = None
+
+            if not in_block:
+                buffer.append(line)
+
+        if buffer:
+            cells.append("\n".join(buffer).strip())
+
+        return [c for c in cells if c.strip()]
+
+    def create_instrumented_script(self, code: str):
+        cells = self.split_into_cells(code)
+        instrumented = []
+        for i, cell in enumerate(cells, 1):
+            cell = autopep8.fix_code(cell, options={'aggressive': 1})
+            lines = cell.splitlines()
+            non_empty_lines = [line for line in lines if line.strip()]
+            if not non_empty_lines:
+                continue
+            min_indent = min(len(line) - len(line.lstrip()) for line in non_empty_lines)
+            dedented_lines = [line[min_indent:] if line.strip() else line for line in lines]
+            dedented_cell = "\n".join(dedented_lines)
+            instrumented.append(f'print("<<CELL {i} START>>")')
+            instrumented.append(dedented_cell)
+            instrumented.append(f'print("<<CELL {i} END>>")')
+        return "\n\n".join(instrumented)
+
+    def run_script_realtime(self, filepath: str = "./outputs/pycode.py"):
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"{filepath} not found.")
+
         process = subprocess.Popen(
-            ["python", "./outputs/pycode.py"],
+            ["python", filepath],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1
+            bufsize=1,  # line-buffered
         )
 
-        stdout_lines, stderr_lines = [], []
-        start_time = time.time()
+        def stream_output(pipe, is_err=False):
+            for line in iter(pipe.readline, ''):
+                if is_err:
+                    print(f"[stderr] {line}", end='')
+                else:
+                    print(line, end='')
+            pipe.close()
 
-        # Real-time output display
-        while True:
-            stdout_line = process.stdout.readline()
-            if stdout_line:
-                print(f"[STDOUT] {stdout_line.strip()}")
-                stdout_lines.append(stdout_line)
+        stdout_thread = threading.Thread(target=stream_output, args=(process.stdout, False))
+        stderr_thread = threading.Thread(target=stream_output, args=(process.stderr, True))
+        stdout_thread.start()
+        stderr_thread.start()
 
-            stderr_line = process.stderr.readline()
-            if stderr_line:
-                print(f"[STDERR] {stderr_line.strip()}")
-                stderr_lines.append(stderr_line)
-
-            if process.poll() is not None:
-                break
-
-        elapsed = time.time() - start_time
         process.wait()
-        return process.returncode, stdout_lines, stderr_lines, elapsed
+        stdout_thread.join()
+        stderr_thread.join()
 
-    def Workflow(self, prompt: str, max_retries: int = 10):
-        """Main loop: generate → run → fix until success with transparency."""
-        print("🚀 Generating initial code...")
-        initial_code = self.response_to_pycode(self.generate(prompt))
-        if not initial_code:
-            raise ValueError("❌ LLM did not return valid Python code.")
-        self.save_pyfile(initial_code)
+        return process.returncode
 
-        for attempt in range(max_retries):
-            print("\n" + "=" * 60)
-            print(f"📜 Attempt {attempt + 1} — Current Code to Execute:")
-            print("=" * 60)
+    def __call__(self, prompt: str):
+        response = self.generate(prompt)
+        print("[INFO] Generated response (truncated):")
+        print(response[:500] + ("..." if len(response) > 500 else ""))
+        self.response_to_pyfile(response, filename="./outputs/pycode.py")
 
-            with open("./outputs/pycode.py") as f:
-                source_code = f.read()
-            print(source_code)
-            print("=" * 60)
+        retcode = self.run_script_realtime("./outputs/pycode.py")
+        if retcode != 0:
+            print(f"[ERROR] Script exited with code {retcode}. Attempting auto-debug fix...")
 
-            returncode, stdout_lines, stderr_lines, elapsed = self.run_code()
+            with open("./outputs/pycode.py", "r", encoding="utf-8") as f:
+                code = f.read()
 
-            print(f"⏱️ Elapsed Time: {elapsed:.2f} seconds")
-            print(f"🔚 Process finished with return code: {returncode}")
-
-            if returncode == 0:
-                print("✅ Success! Code executed without errors.")
-                return 0
-
-            print("🔄 Debugging with LLM...")
             debug_prompt = (
-                f"You are a Python debugger.\n"
-                f"Original task: {prompt}\n"
-                f"Here is the source code that failed:\n{source_code}\n"
-                f"STDOUT:\n{''.join(stdout_lines)}\n"
-                f"STDERR:\n{''.join(stderr_lines)}\n"
-                f"Please return the FULL corrected Python code only."
+                f"You are a Debugger. Fix the Python code based on this error.\n"
+                f"Error: Script exited with code {retcode}\n"
+                f"Source Code:\n{code}\n"
+                f"Original Prompt: {prompt}"
             )
+            debug_response = self.generate(debug_prompt)
+            print("[INFO] Generated debug fix (truncated):")
+            print(debug_response[:500] + ("..." if len(debug_response) > 500 else ""))
+            self.response_to_pyfile(debug_response, filename="./outputs/pycode.py")
 
-            new_code = self.response_to_pycode(self.generate(debug_prompt))
-            if not new_code:
-                print("❌ LLM did not return valid Python code. Stopping.")
-                break
-            if new_code.strip() == source_code.strip():
-                print("⚠️ Code unchanged after fix attempt, stopping.")
-                break
-
-            self.save_pyfile(new_code)
-
-        print("❌ Max retries reached without success.")
-        return 1
+            retcode_fix = self.run_script_realtime("./outputs/pycode.py")
+            if retcode_fix != 0:
+                print(f"[ERROR] Debug fix failed to run script with exit code {retcode_fix}.")
+                return retcode_fix
+            else:
+                print("[INFO] Debug fix script executed successfully!")
+                return 0
+        else:
+            print("[INFO] Script executed successfully!")
+            return 0

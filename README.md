@@ -95,7 +95,7 @@ agent.__call__(prompt)
 
 ```python 
 
-  agent.Workflow(prompt)
+  agent(prompt)
 
 ```
 
