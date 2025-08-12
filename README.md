@@ -91,5 +91,12 @@ agent.__call__(prompt)
 
 ```
 
+### If you use V2 or V3 
+
+```python 
+
+  agent.Workflow(prompt)
+
+```
 
 *** outputs are Stored Local Folders ***

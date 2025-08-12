@@ -1,104 +1,37 @@
 import os
+import sys
+import io
+import contextlib
 import requests
-import subprocess
+import traceback
+from typing import Optional, List
 
 class CodeAgent:
-    SUPPORTED_APIS = {
-        "perplexity": {
-            "url": "https://api.perplexity.ai/chat/completions",
-            "key_env": "PPLX_API_KEY",
-            "default_model": "sonar-pro"
-        },
-        "openai": {
-            "url": "https://api.openai.com/v1/chat/completions",
-            "key_env": "OPENAI_API_KEY",
-            "default_model": "gpt-4o-mini"
-        },
-        "anthropic": {
-            "url": "https://api.anthropic.com/v1/messages",
-            "key_env": "ANTHROPIC_API_KEY",
-            "default_model": "claude-3-opus-20240229"
-        },
-        "gemini": {
-            "url": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-            "key_env": "GEMINI_API_KEY",
-            "default_model": "gemini-pro"
-        },
-        "grok": {
-            "url": "https://api.x.ai/v1/chat/completions",
-            "key_env": "XAI_API_KEY",
-            "default_model": "grok-1"
-        },
-        "groq": {
-            "url": "https://api.groq.com/openai/v1/chat/completions",
-            "key_env": "GROQ_API_KEY",
-            "default_model": "mixtral-8x7b-32768"
+    def __init__(self, apikey: str):
+        self.apikey = apikey
+        if not os.environ.get("PPLX_API_KEY"):
+            os.environ["PPLX_API_KEY"] = self.apikey
+        os.makedirs("./outputs/", exist_ok=True)
+
+    def generate(self, prompt: str) -> str:
+        url = "https://api.perplexity.ai/chat/completions"
+        payload = {
+            "model": "sonar-pro",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 50000
         }
-    }
+        headers = {
+            "Authorization": f"Bearer {os.environ.get('PPLX_API_KEY')}",
+            "Content-Type": "application/json"
+        }
+        result = requests.post(url, json=payload, headers=headers)
+        try:
+            data = result.json()
+        except Exception:
+            raise RuntimeError(f"API did not return valid JSON. Status: {result.status_code}, Text: {result.text}")
+        return data["choices"][0]["message"]["content"]
 
-    def __init__(self, apikey, provider="perplexity", model=None):
-        if provider not in self.SUPPORTED_APIS:
-            raise ValueError(f"Provider '{provider}' not supported. Choose from: {list(self.SUPPORTED_APIS.keys())}")
-        self.provider = provider
-        self.model = model or self.SUPPORTED_APIS[provider]["default_model"]
-        self.prompt = None
-        key_env_var = self.SUPPORTED_APIS[provider]["key_env"]
-        if not os.environ.get(key_env_var):
-            os.environ[key_env_var] = apikey
-
-    def set_provider(self, provider, model=None):
-        """Switch API provider and optionally change the model."""
-        if provider not in self.SUPPORTED_APIS:
-            raise ValueError(f"Provider '{provider}' not supported.")
-        self.provider = provider
-        self.model = model or self.SUPPORTED_APIS[provider]["default_model"]
-
-    def generate(self, prompt, retries=2, fallback=True):
-        """Generate AI output with retry and fallback."""
-        api_info = self.SUPPORTED_APIS[self.provider]
-        url = api_info["url"]
-        headers = {"Content-Type": "application/json"}
-        if self.provider != "gemini":
-            headers["Authorization"] = f"Bearer {os.environ.get(api_info['key_env'])}"
-
-        if self.provider in ("perplexity", "openai", "grok", "groq"):
-            payload = {"model": self.model, "messages": [{"role": "user", "content": prompt}], "max_tokens": 2000}
-        elif self.provider == "anthropic":
-            payload = {"model": self.model, "max_tokens": 1024, "messages": [{"role": "user", "content": prompt}]}
-        elif self.provider == "gemini":
-            url = url.format(model=self.model) + f"?key={os.environ.get(api_info['key_env'])}"
-            payload = {"contents": [{"parts": [{"text": prompt}]}]}
-
-        for attempt in range(retries + 1):
-            try:
-                result = requests.post(url, json=payload, headers=headers, timeout=30)
-                if result.status_code == 200:
-                    response = result.json()
-                    os.makedirs("./outputs/", exist_ok=True)
-                    with open("./outputs/response_1.txt", "w") as file:
-                        file.write(str(response))
-                    print(f"[INFO] Response from {self.provider} ({self.model})")
-                    return result
-                else:
-                    print(f"[WARN] {self.provider} failed (status {result.status_code}) attempt {attempt+1}")
-            except requests.RequestException as e:
-                print(f"[ERROR] {self.provider} request failed: {e} (attempt {attempt+1})")
-
-        if fallback:
-            fallback_list = list(self.SUPPORTED_APIS.keys())
-            idx = fallback_list.index(self.provider)
-            for next_provider in fallback_list[idx+1:] + fallback_list[:idx]:
-                print(f"[INFO] Falling back to {next_provider}")
-                self.set_provider(next_provider)
-                return self.generate(prompt, retries=retries, fallback=False)
-
-        raise RuntimeError("All providers failed.")
-
-    def response_to_pycode(self, response):
-        if not isinstance(response, str):
-            return None
-        if not response.strip():
-            return None
+    def response_to_pycode(self, response: str) -> Optional[str]:
         start_marker = "```python"
         start_index = response.find(start_marker)
         if start_index == -1:
@@ -107,85 +40,87 @@ class CodeAgent:
         end_marker = "```"
         end_index = response.find(end_marker, start_index)
         if end_index == -1:
-            code = response[start_index:].strip()
-        else:
-            code = response[start_index:end_index].strip()
-        for marker in ["# ---- Notes ----", "# Notes", "## Notes", "---- Notes ----"]:
-            idx = code.find(marker)
-            if idx != -1:
-                code = code[:idx].strip()
-        return code if code else None
+            return response[start_index:].strip()
+        return response[start_index:end_index].strip()
 
-    def response_to_pyfile(self, response):
-        if hasattr(response, "json"):
+    def split_into_cells(self, code: str) -> List[str]:
+      raw_cells = code.split("\n\n")  # split on double newline
+      merged_cells = []
+      buffer = ""
+      for raw in raw_cells:
+          buffer += ("\n\n" + raw) if buffer else raw
+          if (buffer.count('"""') % 2 == 0) and (buffer.count("'''") % 2 == 0):
+              merged_cells.append(buffer.strip())
+              buffer = ""
+      if buffer:  # leftover if still unbalanced
+          merged_cells.append(buffer.strip())
+      return merged_cells
+
+
+    def run_cells(self, code: str):
+        """Run code cell-by-cell, showing outputs."""
+        namespace = {}
+        cells = self.split_into_cells(code)
+
+        for idx, cell in enumerate(cells, start=1):
+            print(f"\n📦 Executing Cell {idx}:\n{'-'*40}")
+            print(cell)
+            print("-"*40)
+
+            stdout_buffer = io.StringIO()
+            stderr_buffer = io.StringIO()
+
             try:
-                response = response.json()
-            except:
-                pass
-        if isinstance(response, dict):
-            if self.provider == "gemini":
-                content = response.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-            elif self.provider == "anthropic":
-                content = response.get("content", [{}])[0].get("text", "")
-            else:
-                content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-        else:
-            content = str(response)
-        code = self.response_to_pycode(content)
-        os.makedirs("./outputs/", exist_ok=True)
-        with open("./outputs/pycode.py", "w") as file:
-            file.write(code or "")
-        print("Files Created")
+                with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
+                    exec(cell, namespace)
+            except Exception as e:
+                print(stdout_buffer.getvalue(), end="")
+                print(stderr_buffer.getvalue(), end="")
+                print(f"❌ Error in Cell {idx}: {e}")
+                traceback.print_exc()
+                return False, idx, stdout_buffer.getvalue(), stderr_buffer.getvalue(), str(e)
 
-    def Workflow(self, prompt=None):
-        process = subprocess.Popen(
-            ["python", "./outputs/pycode.py"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1
-        )
-        with open("./outputs/pycode.py", "r") as file:
-            source_code = file.read()
-        stdout_output, stderr_output = [], []
-        while True:
-            out_line = process.stdout.readline()
-            if out_line:
-                print(f"[STDOUT] {out_line.strip()}")
-                stdout_output.append(out_line)
-            err_line = process.stderr.readline()
-            if err_line:
-                print(f"[STDERR] {err_line.strip()}")
-                stderr_output.append(err_line)
-            if process.poll() is not None:
+            print(stdout_buffer.getvalue(), end="")
+            print(stderr_buffer.getvalue(), end="")
+
+        return True, None, None, None, None
+
+    def Workflow(self, prompt: str, max_retries: int = 10):
+        """Generate → run cell-by-cell → fix failing cell → retry."""
+        print("🚀 Generating initial code...")
+        initial_code = self.response_to_pycode(self.generate(prompt))
+        if not initial_code:
+            raise ValueError("❌ LLM did not return valid Python code.")
+
+        for attempt in range(max_retries):
+            print("\n" + "="*60)
+            print(f"🌀 Attempt {attempt + 1}")
+            print("="*60)
+
+            success, fail_cell_idx, stdout_data, stderr_data, err_msg = self.run_cells(initial_code)
+
+            if success:
+                print("✅ All cells executed successfully.")
+                return 0
+
+            print(f"🔄 Debugging cell {fail_cell_idx} with LLM...")
+            debug_prompt = (
+                f"You are a Python debugger.\n"
+                f"Original task: {prompt}\n"
+                f"The following cell caused an error:\n"
+                f"{self.split_into_cells(initial_code)[fail_cell_idx-1]}\n"
+                f"STDOUT:\n{stdout_data}\n"
+                f"STDERR:\n{stderr_data}\n"
+                f"Error message: {err_msg}\n"
+                f"Please return the FULL corrected Python script."
+            )
+
+            new_code = self.response_to_pycode(self.generate(debug_prompt))
+            if not new_code or new_code.strip() == initial_code.strip():
+                print("⚠️ Code unchanged after fix attempt. Stopping.")
                 break
-        for out_line in process.stdout:
-            print(f"[STDOUT] {out_line.strip()}")
-            stdout_output.append(out_line)
-        for err_line in process.stderr:
-            print(f"[STDERR] {err_line.strip()}")
-            stderr_output.append(err_line)
-        process.wait()
-        print(f"Process finished with return code: {process.returncode}")
-        if process.returncode != 0:
-            print("Debugging...")
-            if prompt is None:
-                debug_prompt = (
-                    f"You are Debugger. Fix the code.\nOutput: {''.join(stdout_output)}\n"
-                    f"Errors: {''.join(stderr_output)}\nSource Code:\n{source_code}"
-                )
-            else:
-                debug_prompt = (
-                    f"You are Debugger. Fix the code.\nOutput: {''.join(stdout_output)}\n"
-                    f"Errors: {''.join(stderr_output)}\nSource Code:\n{source_code}\nOriginal Prompt: {prompt}"
-                )
-            response = self.generate(debug_prompt)
-            self.response_to_pyfile(response)
-            return process.returncode
-        return process.returncode
 
-    def __call__(self, prompt):
-        self.prompt = prompt
-        response = self.generate(prompt)
-        self.response_to_pyfile(response)
-        return self.Workflow()
+            initial_code = new_code  # retry with updated code
+
+        print("❌ Max retries reached without success.")
+        return 1
