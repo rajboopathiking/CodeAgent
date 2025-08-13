@@ -15,9 +15,10 @@ from CodeAgent  import CodeAgent
 from CodeAgentV2  import CodeAgent 
 from CodeAgentV3  import CodeAgent
 
-agent = CodeAgent("<enter apikey>")
+agent = CodeAgent("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")
 
 ```
+
 
 ### Just Generate Using Prompt
 
@@ -30,7 +31,7 @@ agent.generate(
 
 ### To Automate Flow - Example Project
 
-
+```
 prompt = """
  You are Ai Agent . You will able to code like ai research scientist
 
@@ -90,6 +91,8 @@ Instructions :
 
 
 """
+
+```
 
 ### To Start Runing And Bebugging
 
