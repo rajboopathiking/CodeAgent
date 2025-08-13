@@ -1,12 +1,10 @@
 import os
 import subprocess
 import requests
-import re
-import autopep8
 import sys
-from typing import Optional
 import threading
 import pkg_resources
+from typing import Optional
 
 
 class CodeAgent:
@@ -22,8 +20,8 @@ class CodeAgent:
 
         os.makedirs("./outputs/", exist_ok=True)
 
+    # --- LLM Interaction ---
     def generate(self, prompt: str) -> str:
-        """Send prompt to API and return the response text."""
         if self.provider == "perplexity":
             url = "https://api.perplexity.ai/chat/completions"
             payload = {
@@ -35,11 +33,8 @@ class CodeAgent:
                 "Authorization": f"Bearer {os.environ.get('PPLX_API_KEY')}",
                 "Content-Type": "application/json"
             }
-            try:
-                result = requests.post(url, json=payload, headers=headers)
-                result.raise_for_status()
-            except requests.RequestException as e:
-                raise RuntimeError(f"Perplexity API request failed: {e}")
+            result = requests.post(url, json=payload, headers=headers)
+            result.raise_for_status()
             data = result.json()
             return data["choices"][0]["message"]["content"]
 
@@ -47,42 +42,28 @@ class CodeAgent:
             url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={os.environ.get('GEMINI_API_KEY')}"
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
             headers = {"Content-Type": "application/json"}
-            try:
-                result = requests.post(url, json=payload, headers=headers)
-                result.raise_for_status()
-            except requests.RequestException as e:
-                raise RuntimeError(f"Gemini API request failed: {e}")
+            result = requests.post(url, json=payload, headers=headers)
+            result.raise_for_status()
             data = result.json()
             return data["candidates"][0]["content"]["parts"][0]["text"]
 
         else:
             raise ValueError("Unknown provider. Use 'perplexity' or 'gemini'.")
 
+    # --- Code Extraction ---
     def response_to_pycode(self, response: str) -> Optional[str]:
-        """Extract Python code from a model's response."""
-        start_marker = "```python"
-        start_index = response.find(start_marker)
-        if start_index != -1:
-            start_index += len(start_marker)
-            end_marker = "```"
-            end_index = response.find(end_marker, start_index)
-            if end_index != -1:
-                return response[start_index:end_index].strip()
-
-        start_marker = "```"
-        start_index = response.find(start_marker)
-        if start_index != -1:
-            start_index += len(start_marker)
-            end_index = response.find("```", start_index)
-            if end_index != -1:
-                return response[start_index:end_index].strip()
-
+        for marker in ["```python", "```"]:
+            start_index = response.find(marker)
+            if start_index != -1:
+                start_index += len(marker)
+                end_index = response.find("```", start_index)
+                if end_index != -1:
+                    return response[start_index:end_index].strip()
         if response.strip():
             return response.strip()
         return None
 
     def response_to_pyfile(self, response: str, filename: str = "./outputs/pycode.py"):
-        """Save extracted Python code to a file."""
         pycode = self.response_to_pycode(response)
         if pycode is None:
             raise ValueError("No python code block found in response.")
@@ -90,36 +71,28 @@ class CodeAgent:
             f.write(pycode)
         print(f"[INFO] Saved extracted python code to {filename}")
 
+    # --- Dependency Handling ---
     @staticmethod
     def parse_imports(code: str):
-        """Extract top-level imports from Python code."""
         imports = set()
         for line in code.splitlines():
             line = line.strip()
             if line.startswith("import "):
-                parts = line.split()
-                if len(parts) >= 2:
-                    imports.add(parts[1].split(".")[0])
+                imports.add(line.split()[1].split(".")[0])
             elif line.startswith("from "):
-                parts = line.split()
-                if len(parts) >= 2:
-                    imports.add(parts[1].split(".")[0])
+                imports.add(line.split()[1].split(".")[0])
         return sorted(imports)
 
     def install_missing_packages(self, packages):
-        """Install missing packages via pip."""
         installed = {pkg.key for pkg in pkg_resources.working_set}
         to_install = [p for p in packages if p.lower() not in installed]
         if not to_install:
             print("[INFO] All dependencies already installed.")
             return 0
-
         print(f"[INFO] Installing missing packages: {to_install}")
         process = subprocess.Popen(
             [sys.executable, "-m", "pip", "install"] + to_install,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
         stdout, stderr = process.communicate()
         print(stdout)
@@ -128,42 +101,20 @@ class CodeAgent:
         return process.returncode
 
     def dependency_manager(self, code):
-        """Extract imports and install missing dependencies."""
         imports = self.parse_imports(code)
         if not imports:
             print("[INFO] No imports found — skipping dependency install.")
             return 0
+        return self.install_missing_packages(imports)
 
-        # Step 1: Install directly from imports
-        ret = self.install_missing_packages(imports)
-        if ret != 0:
-            print("[WARN] Some dependencies from imports failed. Asking LLM for requirements...")
-            # Step 2: Ask LLM for requirements if needed
-            content = self.generate(
-                f"Generate the pip install requirements list for the following code:\n{code}\n"
-                f"Only output package names (and versions if known) in a Python code block."
-            )
-            reqs = self.response_to_pycode(content)
-            if reqs:
-                with open("./outputs/requirements.txt", "w") as f:
-                    f.write(reqs)
-                subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "-r", "./outputs/requirements.txt"],
-                    check=False
-                )
-        return 0
-
+    # --- Script Execution ---
     def run_script_realtime(self, filepath: str = "./outputs/pycode.py"):
-        """Run Python script and stream output in real-time."""
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"{filepath} not found.")
 
         process = subprocess.Popen(
             [sys.executable, filepath],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1
         )
 
         def stream_output(pipe, is_err=False):
@@ -174,34 +125,29 @@ class CodeAgent:
                     print(line, end='')
             pipe.close()
 
-        stdout_thread = threading.Thread(target=stream_output, args=(process.stdout, False))
-        stderr_thread = threading.Thread(target=stream_output, args=(process.stderr, True))
-        stdout_thread.start()
-        stderr_thread.start()
-
+        threading.Thread(target=stream_output, args=(process.stdout, False)).start()
+        threading.Thread(target=stream_output, args=(process.stderr, True)).start()
         process.wait()
-        stdout_thread.join()
-        stderr_thread.join()
-
         return process.returncode
 
+    # --- Debug Loop ---
     def __call__(self, prompt: str):
-        """Generate, run, and debug Python code."""
         prompt_with_rule = prompt.strip() + "\n\nIMPORTANT: Return ONLY a valid Python code block."
         response = self.generate(prompt_with_rule)
         print("[INFO] Generated response (truncated):")
         print(response[:500] + ("..." if len(response) > 500 else ""))
 
-        self.response_to_pyfile(response, filename="./outputs/pycode.py")
-
+        self.response_to_pyfile(response)
         with open("./outputs/pycode.py", "r", encoding="utf-8") as f:
             code = f.read()
 
         self.dependency_manager(code)
-        retcode = self.run_script_realtime("./outputs/pycode.py")
+        retcode = self.run_script_realtime()
 
-        if retcode != 0:
-            print(f"[ERROR] Script exited with code {retcode}. Attempting auto-debug fix...")
+        attempt = 0
+        while retcode != 0 and attempt < 10:
+            attempt += 1
+            print(f"[ERROR] Script exited with code {retcode}. Attempting auto-debug fix #{attempt}...")
 
             with open("./outputs/pycode.py", "r", encoding="utf-8") as f:
                 code = f.read()
@@ -211,8 +157,13 @@ class CodeAgent:
                 f"Error: Script exited with code {retcode}\n"
                 f"Source Code:\n{code}\n"
                 f"Original Prompt: {prompt}\n"
-                f"IMPORTANT: Return ONLY a valid Python code block.and It should Be full Entire Code not just Fix"
+                f"IMPORTANT: Return ONLY a valid Python code block and it should be the FULL ENTIRE CODE, not just a fix."
             )
+
+            # Target known recurring errors
+            if "max_rows" in code and "DataFrame" in code:
+                debug_prompt += "\n\nNote: In latest Gradio, gr.DataFrame does not have 'max_rows'. Remove it or replace with supported args like 'row_count'."
+
             debug_response = self.generate(debug_prompt)
             print("[INFO] Generated debug fix (truncated):")
             print(debug_response[:500] + ("..." if len(debug_response) > 500 else ""))
@@ -225,13 +176,11 @@ class CodeAgent:
                 f.write(pycode)
 
             self.dependency_manager(pycode)
-            retcode_fix = self.run_script_realtime("./outputs/pycode.py")
-            if retcode_fix != 0:
-                print(f"[ERROR] Debug fix failed to run script with exit code {retcode_fix}.")
-                return retcode_fix
-            else:
-                print("[INFO] Debug fix script executed successfully!")
-                return 0
-        else:
+            retcode = self.run_script_realtime()
+
+        if retcode == 0:
             print("[INFO] Script executed successfully!")
-            return 0
+        else:
+            print(f"[ERROR] Script still failed after {attempt} debug attempts.")
+
+        return retcode
