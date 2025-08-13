@@ -1,3 +1,2 @@
 autopep8
-pkg_resources
 requests
