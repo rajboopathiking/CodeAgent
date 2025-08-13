@@ -7,7 +7,7 @@ Help To Automate Code For Your Projects Using LLM
 ```python
 from CodeAgent  import CodeAgent
 
-agent = CodeAgent("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")
+agent = CodeAgent("<enter your api key>")
 
 ```
 
@@ -18,7 +18,7 @@ agent = CodeAgent("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")
 from CodeAgentv=V2  import CodeAgent
 
 agent = CodeAgent(
-pplx_apikey:"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"
+pplx_apikey:"<enter your api key>"
 )
 
 ```
