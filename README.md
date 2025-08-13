@@ -2,12 +2,20 @@
 Help To Automate Code For Your Projects Using LLM 
 
 
+### Install Dependency 
+
+```bash
+ pip install -r requirements.txt
+```
+
 ### Initize Agent Using Proplexity API
 
 ```python
 from CodeAgent  import CodeAgent
+from CodeAgentV2  import CodeAgent 
+from CodeAgentV3  import CodeAgent
 
-agent = CodeAgent("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")
+agent = CodeAgent("<enter apikey>")
 
 ```
 
@@ -87,15 +95,7 @@ Instructions :
 
 ```python 
 
-agent.__call__(prompt)
-
-```
-
-### If you use V2 or V3 
-
-```python 
-
-  agent(prompt)
+agent(prompt)
 
 ```
 
