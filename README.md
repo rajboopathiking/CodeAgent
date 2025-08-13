@@ -102,15 +102,7 @@ Instructions :
 
 ```python 
 
-agent.__call__(prompt)
-
-```
-
-### If you use V2 or V3 
-
-```python 
-
-  agent(prompt)
+agent(prompt)
 
 ```
 
