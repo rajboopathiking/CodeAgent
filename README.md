@@ -35,7 +35,7 @@ agent.generate(
 
 ### To Automate Flow - Example Project
 
-
+```
 prompt = """
  You are Ai Agent . You will able to code like ai research scientist
 
@@ -95,6 +95,8 @@ Instructions :
 
 
 """
+
+```
 
 ### To Start Runing And Bebugging
 
