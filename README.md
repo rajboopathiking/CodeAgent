@@ -110,7 +110,7 @@ agent(prompt)
 ```python
 
 agent = CodeAgent(
-    gemini_apikey="<apikey>",
+    gemini_apikey="AIzaSyDebfxNkbpWrQ7wRmdvxt53_uikm1-ZySU",
     provider= "gemini"
 )
 result = agent({

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codeagent"
+version = "0.1.0"
+description = "A multi-provider Python code execution and dependency management agent"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Boopathi Raj", email = "boopathiraj.researchbrains@gmail.com" }
+]
+requires-python = ">=3.8"
+dependencies = [
+    "requests",
+    "PyPDF2",
+    "autopep8",
+    "anthropic",
+    "openai"
+    "importlib-metadata; python_version<'3.8'"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/rajboopathiking/codeagent"
+"Bug Tracker" = "https://github.com/rajboopathiking/codeagent/issues"   
