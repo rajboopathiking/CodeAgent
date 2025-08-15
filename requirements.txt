@@ -1,2 +1,5 @@
 autopep8
 requests
+PyPDF2
+anthropic
+openai
