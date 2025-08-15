@@ -15,7 +15,7 @@ from CodeAgent  import CodeAgent
 from CodeAgentV2  import CodeAgent 
 from CodeAgentV3  import CodeAgent
 
-agent = CodeAgent("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")
+agent = CodeAgent("<apikey>")
 
 ```
 
