@@ -19,6 +19,10 @@ agent = CodeAgent("<apikey>")
 
 ```
 
+if code agent v1 is just generate and run python project (provider="proplexity")
+if code agent v2 is just generate and run python project (provider="proplexity","gemini") (dependency Manager)
+if code agent v2 is just generate and run python project (provider=multiple providers) (dependency Manager) (multimodal also)
+
 
 ### Just Generate Using Prompt
 
@@ -102,4 +106,18 @@ agent(prompt)
 
 ```
 
+### To V3 Version:
+```python
+
+agent = CodeAgent(
+    gemini_apikey="AIzaSyDebfxNkbpWrQ7wRmdvxt53_uikm1-ZySU",
+    provider= "gemini"
+)
+result = agent({
+    "text": "Write a Python script to plot.save in ./plot.png",
+    "images": ["/content/Loss.png","/content/Accuracy.png"]
+})
+print(result)
+
+```
 *** outputs are Stored Local Folders ***
