@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "c4agent"
-version = "0.1.2"
+version = "0.1"
 description = "A multi-provider Python code execution and dependency management agent"
 readme = "README.md"
 license = { file = "LICENSE" }
