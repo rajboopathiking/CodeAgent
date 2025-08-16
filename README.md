@@ -1,123 +1,163 @@
-# CodeAgent
-Help To Automate Code For Your Projects Using LLM 
+# 🚀 CodeAgent  
 
+Automate code generation, execution, and debugging for your projects using **LLM-powered agents**.  
+Supports multiple providers (`Proplexity`, `Gemini`, and more), multimodal input, and dependency management.  
 
-### Install Dependency 
+<p align="center">
+  <img src="https://img.shields.io/pypi/v/c4agent?color=blue&label=PyPI">
+  <img src="https://img.shields.io/badge/python-3.8+-blue.svg">
+  <img src="https://img.shields.io/badge/license-MIT-green.svg">
+  <img src="https://img.shields.io/badge/build-passing-brightgreen.svg">
+</p>
+
+---
+
+## 📦 Installation  
+
+Install from **PyPI**:
 
 ```bash
- pip install -r requirements.txt
+pip install c4agent
 ```
 
-### Initize Agent Using Proplexity API
+Or install from source:
+
+```bash
+git clone https://github.com/yourusername/CodeAgent.git
+cd CodeAgent
+pip install -r requirements.txt
+```
+
+## ⚡ Quick Start
+
+### Initialize Agent
 
 ```python
-from CodeAgent  import CodeAgent
-from CodeAgentV2  import CodeAgent 
-from CodeAgentV3  import CodeAgent
+from Agent.CodeAgent import CodeAgent        # v1
+from Agent.CodeAgentV2 import CodeAgent      # v2
+from Agent.CodeAgentV3 import CodeAgent      # v3
 
+# Example: Initialize with Proplexity API
 agent = CodeAgent("<apikey>")
-
 ```
 
-if code agent v1 is just generate and run python project (provider="proplexity")
-if code agent v2 is just generate and run python project (provider="proplexity","gemini") (dependency Manager)
-if code agent v2 is just generate and run python project (provider=multiple providers) (dependency Manager) (multimodal also)
+## 🧑‍💻 Versions
 
+### CodeAgent V1
+- Generates & runs Python projects
+- Provider: "proplexity"
 
-### Just Generate Using Prompt
+### CodeAgent V2
+- Generates & runs Python projects
+- Providers: "proplexity", "gemini"
+- Dependency Manager included
+
+### CodeAgent V3
+- Generates & runs Python projects
+- Supports multiple providers
+- Dependency Manager
+- Multimodal input (Text + Images)
+
+## ✨ Usage
+
+### 🔹 1. Generate Code from Prompt
 
 ```python
 agent.generate(
     "Explain About Artificial Intelligence"
 ).json()
-
 ```
 
-### To Automate Flow - Example Project
+### 🔹 2. Automate Flow - Example Project
 
-```
+```python
 prompt = """
- You are Ai Agent . You will able to code like ai research scientist
+You are an AI Agent. You will code like an AI research scientist.
 
- Code For SmolAgents
+Code For SmolAgents
 
-Instructions :
+Instructions:
+1. Agent should answer tech-related questions
+2. Execution not supported
+3. Give only Python code
+4. Docstrings required
 
-  1) Agent should answer tech related questions
-  2) Execution not supported
-  3) Give only Code
-  4) python only support
-  5) Should Consider doc string
+User: Build a multimodal embedding model (Image + Text) using contrastive learning.
 
+Dataset:
+- Kaggle credentials are already set up
+- Dataset: fashion-product-images-small
 
- user:  Building embedding model using contrastive learning . MultiModal embedding model ( Image + Text)
+Example dataset load:
+```python
+import pandas as pd
+df = pd.read_csv("/content/myntradataset/styles.csv", on_bad_lines="skip")
+df.head()
+```
 
- Dataset Link and Description :
-   Kaggle creadiential also settled up and
-
-   load dataset
-
-
-    ```python
-    !mkdir -p /root/.kaggle
-    !cp kaggle.json /root/.kaggle
-    !chmod 600 /root/.kaggle/kaggle.json
-    !kaggle datasets download paramaggarwal/fashion-product-images-small
-
-    ```
-
-
-  dataset load using python :
-
-  import pandas as pd
-
-  df = pd.read_csv("/content/myntradataset/styles.csv",on_bad_lines="skip")
-  df.head()
-
-  id	gender	masterCategory	subCategory	articleType	baseColour	season	year	usage	productDisplayName
-  0	15970	Men	Apparel	Topwear	Shirts	Navy Blue	Fall	2011.0	Casual	Turtle Check Men Navy Blue Shirt
-  1	39386	Men	Apparel	Bottomwear	Jeans	Blue	Summer	2012.0	Casual	Peter England Men Party Blue Jeans
-  2	59263	Women	Accessories	Watches	Watches	Silver	Winter	2016.0	Casual	Titan Women Silver Watch
-  3	21379	Men	Apparel	Bottomwear	Track Pants	Black	Fall	2011.0	Casual	Manchester United Men Solid Black Track Pants
-  4	53759	Men	Apparel	Topwear	Tshirts	Grey	Summer	2012.0	Casual	Puma Men Grey T-shirt
-
-
-  Use HuggingfacePretrained Bert and VIT model for embedding model and Use Torch and langchain(if needed)
-
-  Embedding Model Train Using Contrastive Learning with Evaluation and Testing
-
-  Save Best Model and load it for inference Then Save Log File also
-
-  Progress bar using tqdm and cuda support
-
-  Give me a full final code
-
-
-
+Model Requirements:
+- Use HuggingFace pretrained BERT and ViT models
+- Train using contrastive learning
+- Use Torch and optionally LangChain
+- Save best model & logs
+- Include evaluation, testing, and CUDA support
+- Progress bar using tqdm
+- Give full final code.
 """
 
-```
-
-### To Start Runing And Bebugging
-
-```python 
-
+# Run the agent
 agent(prompt)
-
 ```
 
-### To V3 Version:
-```python
+### 🔹 3. V3 Multimodal Example
 
+```python
 agent = CodeAgent(
     gemini_apikey="<apikey>",
-    provider= "gemini"
+    provider="gemini"
 )
-result = agent({
-    "text": "Write a Python script to plot.save in ./plot.png",
-    "images": ["/content/Loss.png","/content/Accuracy.png"]
-})
-print(result)
 
+result = agent({
+    "text": "Write a Python script to save a plot in ./plot.png",
+    "images": ["/content/Loss.png"/content/Accuracy.png"]
+})
+
+print(result)
 ```
-*** outputs are Stored Local Folders ***
+
+📂 Outputs are stored in local folders.
+
+## 📑 Example Output
+
+When running prompts, CodeAgent will:
+- ✅ Generate full Python code
+- ✅ Manage dependencies
+- ✅ Save outputs & logs locally
+- ✅ Handle debugging & execution automatically
+
+## 🔧 Requirements
+- Python 3.8+
+- Dependencies (auto-installed with `pip install c4agent`)
+
+## 📌 Roadmap
+- Support Proplexity provider
+- Add Gemini provider
+- Dependency manager
+- Multimodal input (text + images)
+- Add more providers (OpenAI, Claude, etc.)
+- CLI support
+- Web UI for interactive coding
+
+## 🤝 Contributing
+Contributions are welcome!
+1. Fork the repo
+2. Create your feature branch (`git checkout -b feature/awesome-feature`)
+3. Commit changes (`git commit -m 'Add awesome feature'`)
+4. Push to branch (`git push origin feature/awesome-feature`)
+5. Open a Pull Request
+
+## 📜 License
+MIT License © 2025
+
+## 🌟 Support
+If you like this project, please ⭐ the repo to support development!
