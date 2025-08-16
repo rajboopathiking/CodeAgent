@@ -11,149 +11,100 @@ Supports multiple providers (`Proplexity`, `Gemini`, and more), multimodal input
 </p>
 
 ---
-
-## 📦 Installation  
-
-Install from **PyPI**:
-
-```bash
+📦 Installation
+Install from PyPI:
 pip install c4agent
-```
 
 Or install from source:
-
-```bash
 git clone https://github.com/yourusername/CodeAgent.git
 cd CodeAgent
 pip install -r requirements.txt
-```
 
-## ⚡ Quick Start
-
-### Initialize Agent
-
-```python
+⚡ Quick Start
+Initialize Agent
 from Agent.CodeAgent import CodeAgent        # v1
 from Agent.CodeAgentV2 import CodeAgent      # v2
 from Agent.CodeAgentV3 import CodeAgent      # v3
 
 # Example: Initialize with Proplexity API
 agent = CodeAgent("<apikey>")
-```
 
-## 🧑‍💻 Versions
+🧑‍💻 Versions
+CodeAgent V1
 
-### CodeAgent V1
-- Generates & runs Python projects
-- Provider: "proplexity"
+Generates & runs Python projects
+Provider: "proplexity"
 
-### CodeAgent V2
-- Generates & runs Python projects
-- Providers: "proplexity", "gemini"
-- Dependency Manager included
+CodeAgent V2
 
-### CodeAgent V3
-- Generates & runs Python projects
-- Supports multiple providers
-- Dependency Manager
-- Multimodal input (Text + Images)
+Generates & runs Python projects
+Providers: "proplexity", "gemini"
+Dependency Manager included
 
-## ✨ Usage
+CodeAgent V3
 
-### 🔹 1. Generate Code from Prompt
+Generates & runs Python projects
+Supports multiple providers
+Dependency Manager
+Multimodal input (Text + Images)
 
-```python
+✨ Usage
+🔹 1. Generate Code from Prompt
 agent.generate(
     "Explain About Artificial Intelligence"
 ).json()
-```
 
-### 🔹 2. To Automate Flow - Example Project
-
-```
+🔹 2. Automate Flow - Example Project
 prompt = """
- You are Ai Agent . You will able to code like ai research scientist
+You are an AI Agent. You will code like an AI research scientist.
 
- Code For SmolAgents
+Code For SmolAgents
 
-Instructions :
+Instructions:
+1. Agent should answer tech-related questions
+2. Execution not supported
+3. Give only Python code
+4. Python only support
+5. Should include docstrings
 
-  1) Agent should answer tech related questions
-  2) Execution not supported
-  3) Give only Code
-  4) python only support
-  5) Should Consider doc string
+User: Build a multimodal embedding model (Image + Text) using contrastive learning.
 
+Dataset Link and Description:
+- Kaggle credentials are already set up
+- Dataset: fashion-product-images-small
 
- user:  Building embedding model using contrastive learning . MultiModal embedding model ( Image + Text)
+Load dataset:
+```python
+!mkdir -p /root/.kaggle
+!cp kaggle.json /root/.kaggle
+!chmod 600 /root/.kaggle/kaggle.json
+!kaggle datasets download paramaggarwal/fashion-product-images-small
 
- Dataset Link and Description :
-   Kaggle creadiential also settled up and
+Dataset load using Python:
+import pandas as pd
+df = pd.read_csv("/content/myntradataset/styles.csv", on_bad_lines="skip")
+df.head()
 
-   load dataset
-
-
-    ```python
-    !mkdir -p /root/.kaggle
-    !cp kaggle.json /root/.kaggle
-    !chmod 600 /root/.kaggle/kaggle.json
-    !kaggle datasets download paramaggarwal/fashion-product-images-small
-
-    ```
-
-
-  dataset load using python :
-
-  import pandas as pd
-
-  df = pd.read_csv("/content/myntradataset/styles.csv",on_bad_lines="skip")
-  df.head()
-
-  id	gender	masterCategory	subCategory	articleType	baseColour	season	year	usage	productDisplayName
-  0	15970	Men	Apparel	Topwear	Shirts	Navy Blue	Fall	2011.0	Casual	Turtle Check Men Navy Blue Shirt
-  1	39386	Men	Apparel	Bottomwear	Jeans	Blue	Summer	2012.0	Casual	Peter England Men Party Blue Jeans
-  2	59263	Women	Accessories	Watches	Watches	Silver	Winter	2016.0	Casual	Titan Women Silver Watch
-  3	21379	Men	Apparel	Bottomwear	Track Pants	Black	Fall	2011.0	Casual	Manchester United Men Solid Black Track Pants
-  4	53759	Men	Apparel	Topwear	Tshirts	Grey	Summer	2012.0	Casual	Puma Men Grey T-shirt
-
-
-  Use HuggingfacePretrained Bert and VIT model for embedding model and Use Torch and langchain(if needed)
-
-  Embedding Model Train Using Contrastive Learning with Evaluation and Testing
-
-  Save Best Model and load it for inference Then Save Log File also
-
-  Progress bar using tqdm and cuda support
-
-  Give me a full final code
-
-
-
-"""
-
-```
-
-### 🔹 3. To Start Runing And Bebugging
-
-```python 
-
-agent(prompt)
-
-```
+Example dataset output:
+   id    gender    masterCategory    subCategory    articleType    baseColour    season    year    usage    productDisplayName
+0  15970  Men      Apparel         Topwear        Shirts        Navy Blue    Fall      2011.0  Casual   Turtle Check Men Navy Blue Shirt
+1  39386  Men      Apparel         Bottomwear     Jeans         Blue         Summer   2012.0  Casual   Peter England Men Party Blue Jeans
+2  59263  Women    Accessories     Watches        Watches       Silver       Winter   2016.0  Casual   Titan Women Silver Watch
+3  21379  Men      Apparel         Bottomwear     Track Pants   Black        Fall      2011.0  Casual   Manchester United Men Solid Black Track Pants
+4  53759  Men      Apparel         Topwear        Tshirts       Grey         Summer   2012.0  Casual   Puma Men Grey T-shirt
 
 Model Requirements:
-- Use HuggingFace pretrained BERT and ViT models
-- Train using contrastive learning
-- Use Torch and optionally LangChain
-- Save best model & logs
-- Include evaluation, testing, and CUDA support
-- Progress bar using tqdm
-- Give full final code.
-"""
 
-# Run the agent
+Use HuggingFace pretrained BERT and ViT models
+Train using contrastive learning
+Use Torch and optionally LangChain
+Save best model & logs
+Include evaluation, testing, and CUDA support
+Progress bar using tqdm
+Provide full final code"""
+
+Run the agent
 agent(prompt)
-```
 
 ### 🔹 3. V3 Multimodal Example
 
@@ -165,45 +116,45 @@ agent = CodeAgent(
 
 result = agent({
     "text": "Write a Python script to save a plot in ./plot.png",
-    "images": ["/content/Loss.png"/content/Accuracy.png"]
+    "images": ["/content/Loss.png", "/content/Accuracy.png"]
 })
 
 print(result)
-```
 
 📂 Outputs are stored in local folders.
-
-## 📑 Example Output
-
+📑 Example Output
 When running prompts, CodeAgent will:
-- ✅ Generate full Python code
-- ✅ Manage dependencies
-- ✅ Save outputs & logs locally
-- ✅ Handle debugging & execution automatically
 
-## 🔧 Requirements
-- Python 3.8+
-- Dependencies (auto-installed with `pip install c4agent`)
+✅ Generate full Python code
+✅ Manage dependencies
+✅ Save outputs & logs locally
+✅ Handle debugging & execution automatically
 
-## 📌 Roadmap
-- Support Proplexity provider
-- Add Gemini provider
-- Dependency manager
-- Multimodal input (text + images)
-- Add more providers (OpenAI, Claude, etc.)
-- CLI support
-- Web UI for interactive coding
+🔧 Requirements
 
-## 🤝 Contributing
+Python 3.8+
+Dependencies (auto-installed with pip install c4agent)
+
+📌 Roadmap
+
+Support Proplexity provider
+Add Gemini provider
+Dependency manager
+Multimodal input (text + images)
+Add more providers (OpenAI, Claude, etc.)
+CLI support
+Web UI for interactive coding
+
+🤝 Contributing
 Contributions are welcome!
-1. Fork the repo
-2. Create your feature branch (`git checkout -b feature/awesome-feature`)
-3. Commit changes (`git commit -m 'Add awesome feature'`)
-4. Push to branch (`git push origin feature/awesome-feature`)
-5. Open a Pull Request
 
-## 📜 License
+Fork the repo
+Create your feature branch (git checkout -b feature/awesome-feature)
+Commit changes (git commit -m 'Add awesome feature')
+Push to branch (git push origin feature/awesome-feature)
+Open a Pull Request
+
+📜 License
 MIT License © 2025
-
-## 🌟 Support
+🌟 Support
 If you like this project, please ⭐ the repo to support development!
