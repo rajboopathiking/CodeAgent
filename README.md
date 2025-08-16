@@ -4,7 +4,7 @@ Automate code generation, execution, and debugging for your projects using **LLM
 Supports multiple providers (`Proplexity`, `Gemini`, and more), multimodal input, and dependency management.  
 
 <p align="center">
-  <button><img src="https://img.shields.io/pypi/v/c4agent?color=blue&label=PyPI">https://pypi.org/project/c4agent/</button>
+  <a href="https://pypi.org/project/c4agent/"><img src="https://img.shields.io/pypi/v/c4agent?color=blue&label=PyPI"></a>
   <img src="https://img.shields.io/badge/python-3.8+-blue.svg">
   <img src="https://img.shields.io/badge/license-MIT-green.svg">
   <img src="https://img.shields.io/badge/build-passing-brightgreen.svg">
