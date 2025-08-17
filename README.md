@@ -184,6 +184,7 @@ If you like this project, please ⭐ the repo to support development!
 
 ______________________________________________________________________________
 
+V3 API Documentation
 
 ```python
 class CodeAgent:
