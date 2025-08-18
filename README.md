@@ -1,6 +1,6 @@
 🚀 CodeAgent 
 
-Its Core Part To Create Agentic Generative AI ( AGI ) 
+Its Core Part To Create Agentic Generative AI
 
 Automate code generation, execution, and debugging for your projects using **LLM-powered agents**.  
 Supports multiple providers (`Proplexity`, `Gemini`, and more), multimodal input, and dependency management.  
