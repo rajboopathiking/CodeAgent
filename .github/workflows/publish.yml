@@ -3,7 +3,7 @@ name: Publish to PyPI
 on:
   push:
     tags:
-      - "v1.2" # Runs only when a tag starting with v is pushed, e.g., v0.1.0
+      - "v1.21" # Runs only when a tag starting with v is pushed, e.g., v0.1.0
 
 jobs:
   build-and-publish:
