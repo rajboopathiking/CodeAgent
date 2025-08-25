@@ -1,208 +1,225 @@
+# Requirements: requests pillow pypdf2 importlib-metadata
+import os
+import sys
+import re
+import ast
+import threading
+import subprocess
+import requests
+import pkg_resources
+import importlib.util
+import base64
+from typing import Optional, Union, List, Callable
+from PIL import Image
+import PyPDF2
+import io
+
+try:
+    from anthropic import Anthropic
+except ImportError:
+    Anthropic = None
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+
+
 class CodeAgent:
-  def __init__(self,apikey):
-    import os
-
-    self.apikey = apikey
-    self.prompt = None
-
-    if not os.environ.get("PPLX_API_KEY"):
-      os.environ["PPLX_API_KEY"] = self.apikey
-
-  def generate(self,prompt):
-    import requests
-    import os
-    import getpass
-    from IPython.display import display
-
-    url = "https://api.perplexity.ai/chat/completions"
-
-    payload = {
-        "model": "sonar-pro",
-        "messages": [
-            {"role": "user", "content": prompt}
-        ],
-        "max_tokens": 50000
-    }
-    headers = {
-        "Authorization": f"Bearer {os.environ.get('PPLX_API_KEY')}",
-        "Content-Type": "application/json"
-    }
-
-    result = requests.post(url, json=payload, headers=headers)
-    response = result.json()
-
-    import os
-    os.makedirs("./outputs/",exist_ok=True)
-    with open("./outputs/response_1.txt","w") as file:
-      file.writelines(response["choices"][0]["message"]["content"])
-
-    return result
-
-  def response_to_pycode(self,response):
     """
-    Extract Python code from a response string containing a code block, removing any trailing notes or descriptions.
+    A framework-style Code Agent that can:
+      - Generate Python code from text prompts (remote API or local function).
+      - Install missing dependencies automatically.
+      - Debug failed code up to N retries.
+      - Run scripts with real-time stdout/stderr streaming.
 
-    Args:
-        response: A string containing a potential Python code block marked by triple backticks (```python).
-
-    Returns:
-        str: The extracted Python code as a string, stripped of leading/trailing whitespace and trailing notes.
-        None: If the input is invalid, no valid Python code block is found, or the block is empty.
-
-    Examples:
-        >>> response = "Some text\\n```python\\nprint('hello')\\n```\\nMore text"
-        >>> response_to_pycode(response)
-        "print('hello')"
-        >>> response_to_pycode("No code here")
-        None
-        >>> response = "```python\\nprint('test')\\n```\\n# ---- Notes ----\\n# Example note"
-        >>> response_to_pycode(response)
-        "print('test')"
+    Provider options: "openai", "anthropic", "gemini", "perplexity", or "local".
     """
-    # Validate input type
-    if not isinstance(response, str):
-        print(f"Error: Invalid input type. Expected str, got {type(response).__name__}.")
-        return None
 
-    # Check if response is empty or only whitespace
-    if not response or response.isspace():
-        print("Error: Input string is empty or contains only whitespace.")
-        return None
+    def __init__(self,
+                 provider: str = "local",
+                 model: Optional[str] = None,
+                 local_fn: Optional[Callable[[str], str]] = None,
+                 pplx_apikey: Optional[str] = None,
+                 gemini_apikey: Optional[str] = None,
+                 anthropic_apikey: Optional[str] = None,
+                 openai_apikey: Optional[str] = None,
+                 attempt_limit = 5):
+        self.provider = provider.lower()
+        self.model = model
+        self.local_fn = local_fn
+        self.attempt_limit = attempt_limit
 
-    # Find the start of the Python code block
-    start_marker = "```python"
-    start_index = response.find(start_marker)
-    if start_index == -1:
-        print("Warning: No Python code block found (missing '```python').")
-        return None
+        # Defaults for hosted providers
+        self.default_models = {
+            "perplexity": "sonar-pro",
+            "gemini": "gemini-2.5-flash",
+            "anthropic": "claude-3-5-sonnet-20241022",
+            "openai": "gpt-4o"
+        }
+        if not self.model and self.provider in self.default_models:
+            self.model = self.default_models[self.provider]
 
-    # Adjust start_index to point to the actual code content
-    start_index += len(start_marker)
+        # API keys (env fallback)
+        if pplx_apikey and not os.environ.get("PPLX_API_KEY"):
+            os.environ["PPLX_API_KEY"] = pplx_apikey
+        if gemini_apikey and not os.environ.get("GEMINI_API_KEY"):
+            os.environ["GEMINI_API_KEY"] = gemini_apikey
+        if anthropic_apikey and not os.environ.get("ANTHROPIC_API_KEY"):
+            os.environ["ANTHROPIC_API_KEY"] = anthropic_apikey
+        if openai_apikey and not os.environ.get("OPENAI_API_KEY"):
+            os.environ["OPENAI_API_KEY"] = openai_apikey
 
-    # Find the end of the code block by looking for the first standalone "```"
-    end_marker = "```"
-    end_index = -1
-    current_index = start_index
-    while current_index < len(response):
-        next_backtick = response.find(end_marker, current_index)
-        if next_backtick == -1:
-            print("Warning: Closing '```' not found after '```python'. Extracting until end of string.")
-            return response[start_index:].strip()
+        os.makedirs("./outputs/", exist_ok=True)
 
-        # Check if the backticks are standalone (not part of another code block or text)
-        # Ensure it's not immediately followed by "python" or other text that indicates a new code block
-        if next_backtick + len(end_marker) >= len(response) or \
-           response[next_backtick + len(end_marker):].lstrip().startswith(('\n', ' ', '\t', '\r')) or \
-           response[next_backtick + len(end_marker)] in ('\n', ' ', '\t', '\r', ''):
-            end_index = next_backtick
-            break
+    # ------------------------------------------------------------------
+    # Core generation
+    # ------------------------------------------------------------------
+    def generate(self, prompt: str) -> str:
+        """
+        Generate code/text from the provider or local function.
+        """
+        if self.provider == "local":
+            if not self.local_fn:
+                raise ValueError("Local provider requires a local_fn callback.")
+            return self.local_fn(prompt)
 
-        # Move past this backtick to find the next one
-        current_index = next_backtick + len(end_marker)
+        elif self.provider == "perplexity":
+            url = "https://api.perplexity.ai/chat/completions"
+            payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 5000
+            }
+            headers = {
+                "Authorization": f"Bearer {os.environ.get('PPLX_API_KEY')}",
+                "Content-Type": "application/json"
+            }
+            result = requests.post(url, json=payload, headers=headers)
+            result.raise_for_status()
+            return result.json()["choices"][0]["message"]["content"]
 
-    if end_index == -1:
-        print("Warning: No valid closing '```' found. Extracting until end of string.")
-        return response[start_index:].strip()
+        elif self.provider == "gemini":
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={os.environ.get('GEMINI_API_KEY')}"
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+            result = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+            result.raise_for_status()
+            return result.json()["candidates"][0]["content"]["parts"][0]["text"]
 
-    # Extract the code block and remove trailing notes
-    code = response[start_index:end_index].strip()
-    if not code:
-        print("Warning: Python code block is empty.")
-        return None
+        elif self.provider == "anthropic":
+            if not Anthropic:
+                raise ImportError("Install anthropic: pip install anthropic")
+            client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+            response = client.messages.create(
+                model=self.model,
+                max_tokens=5000,
+                messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}]
+            )
+            return response.content[0].text
 
-    # Explicitly remove any trailing notes section (e.g., "# ---- Notes ----")
-    # This is an additional safeguard, though the end_index should already exclude notes
-    notes_markers = ["# ---- Notes ----", "# Notes", "## Notes", "---- Notes ----"]
-    for marker in notes_markers:
-        notes_index = code.find(marker)
-        if notes_index != -1:
-            code = code[:notes_index].strip()
+        elif self.provider == "openai":
+            if not OpenAI:
+                raise ImportError("Install openai: pip install openai")
+            client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],
+                max_tokens=5000
+            )
+            return response.choices[0].message.content
 
-    # Final check to ensure code is not empty after removing notes
-    if not code:
-        print("Warning: Code block is empty after removing notes.")
-        return None
+        else:
+            raise ValueError(f"Unknown provider: {self.provider}")
 
-    return code
+    # ------------------------------------------------------------------
+    # Dependency management
+    # ------------------------------------------------------------------
+    def parse_imports(self, code: str) -> List[str]:
+        """Extract top-level imports from code."""
+        try:
+            tree = ast.parse(code)
+            imports = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imports.extend(name.name.split('.')[0] for name in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    imports.append(node.module.split('.')[0])
+            return sorted(set(imports))
+        except SyntaxError:
+            return []
 
-  def response_to_pyfile(self,response):
-    response = response.json()["choices"][0]["message"]["content"]
-    code = self.response_to_pycode(response)
-    import os
-    os.makedirs("./outputs/",exist_ok=True)
-    with open("./outputs/pycode.py","w") as file:
-      file.write(code)
+    def install_missing_packages(self, packages: List[str]):
+        installed = {pkg.key.lower() for pkg in pkg_resources.working_set}
+        to_install = [p for p in packages if p.lower() not in installed]
+        if not to_install:
+            return 0, "", ""
+        process = subprocess.run([sys.executable, "-m", "pip", "install"] + to_install,
+                                 capture_output=True, text=True)
+        return process.returncode, process.stdout, process.stderr
 
-    print("Files Created")
+    # ------------------------------------------------------------------
+    # Code extraction & execution
+    # ------------------------------------------------------------------
+    def response_to_pycode(self, response: str) -> Optional[str]:
+        """Extract ```python code``` blocks."""
+        match = re.search(r"```(?:python)?\s*(.*?)```", response, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return response.strip() if response.strip() else None
 
-  def Workflow(self,prompt=None):
-    from sys import stdout
-    import subprocess
+    def run_script_realtime(self, filepath: str = "./outputs/pycode.py"):
+        process = subprocess.Popen([sys.executable, filepath],
+                                   stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE,
+                                   text=True, bufsize=1)
+        stdout_lines, stderr_lines = [], []
 
-    # Run the pycode.py script and stream logs in real-time
-    process = subprocess.Popen(
-        ["python", "./outputs/pycode.py"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1  # Line-buffered
-    )
+        def stream(pipe, lines, prefix=""):
+            for line in iter(pipe.readline, ''):
+                lines.append(line)
+                print(prefix + line, end="")
+            pipe.close()
 
-    with open("./outputs/pycode.py","r") as file:
-      source_code = file.read()
-    # Stream stdout and stderr in real-time
-    stdout_output = []
-    stderr_output = []
+        t1 = threading.Thread(target=stream, args=(process.stdout, stdout_lines))
+        t2 = threading.Thread(target=stream, args=(process.stderr, stderr_lines, "[stderr] "))
+        t1.start(); t2.start()
+        process.wait(); t1.join(); t2.join()
+        return process.returncode, ''.join(stdout_lines), ''.join(stderr_lines)
 
-    while True:
-        # Read stdout line by line
-        stdout_line = process.stdout.readline()
-        if stdout_line:
-            print(f"[STDOUT] {stdout_line.strip()}")
-            stdout_output.append(stdout_line)
+    # ------------------------------------------------------------------
+    # Orchestration: Text → Code → Install → Debug → Run
+    # ------------------------------------------------------------------
+    def __call__(self, prompt: str):
+        """End-to-end pipeline: prompt → code → install → run → debug if fails."""
+        response = self.generate(prompt)
+        pycode = self.response_to_pycode(response)
+        if not pycode:
+            raise ValueError("No Python code returned.")
 
-        # Read stderr line by line
-        stderr_line = process.stderr.readline()
-        if stderr_line:
-            print(f"[STDERR] {stderr_line.strip()}")
-            stderr_output.append(stderr_line)
+        # Save file
+        with open("./outputs/pycode.py", "w", encoding="utf-8") as f:
+            f.write(pycode)
 
-        # Check if the process has finished
-        if process.poll() is not None:
-            break
+        # Install packages
+        imports = self.parse_imports(pycode)
+        self.install_missing_packages(imports)
 
-    # Capture any remaining output
-    for stdout_line in process.stdout:
-        print(f"[STDOUT] {stdout_line.strip()}")
-        stdout_output.append(stdout_line)
-    for stderr_line in process.stderr:
-        print(f"[STDERR] {stderr_line.strip()}")
-        stderr_output.append(stderr_line)
+        # Run script with retry debugging
+        ret, out, err = self.run_script_realtime()
+        attempt = 0
+        while ret != 0 and attempt < self.attempt_limit:
+            attempt += 1
+            debug_prompt = (
+                f"Fix the following Python code.\nError:\n{err}\n\nCode:\n{pycode}\n\n"
+                "Return only full valid Python code in a code block."
+            )
+            response = self.generate(debug_prompt)
+            pycode = self.response_to_pycode(response)
+            if not pycode:
+                break
+            with open("./outputs/pycode.py", "w", encoding="utf-8") as f:
+                f.write(pycode)
+            imports = self.parse_imports(pycode)
+            self.install_missing_packages(imports)
+            ret, out, err = self.run_script_realtime()
 
-
-    # Ensure the process is complete
-    process.wait()
-
-    # Print the return code
-    print(f"Process finished with return code: {process.returncode}")
-
-
-    if process.returncode != 0:
-      print("Debugging...")
-      if prompt is None:
-        prompt = f'You are Debugger , I will attach both code and error and output based on that i want corrected code : {"".join(stdout_output)} and {"".join(stderr_output)} and Source Code : {source_code} all code in together full final fixed corrected code'
-      else:
-        prompt = f'You are Debugger , I will attach both code and error and output based on that i want corrected code : {"".join(stdout_output)} and {"".join(stderr_output)} and Source Code : {source_code} all code in together full final fixed corrected code. Actual Prompt : {prompt}'
-      response = self.generate(prompt)
-      self.response_to_pyfile(response)
-      return process.returncode
-    else:
-      return process.returncode
-
-  def __call__(self,prompt):
-    self.prompt = prompt
-
-
-    response = self.generate(prompt)
-    self.response_to_pyfile(response)
-    return self.Workflow()
+        return ret, out, err
