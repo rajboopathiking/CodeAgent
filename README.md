@@ -45,23 +45,6 @@ agent = CodeAgent(
 
 ```
 
-## 🧑‍💻 Versions
-
-### CodeAgent V1
-- Generates & runs Python projects
-- Provider: "proplexity"
-
-### CodeAgent V2
-- Generates & runs Python projects
-- Providers: "proplexity", "gemini"
-- Dependency Manager included
-
-### CodeAgent V3
-- Generates & runs Python projects
-- Supports multiple providers
-- Dependency Manager
-- Multimodal input (Text + Images)
-
 ## ✨ Usage
 
 ### 🔹 1. Generate Code from Prompt
