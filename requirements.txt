@@ -3,3 +3,8 @@ requests
 PyPDF2
 anthropic
 openai
+requests>=2.28.0
+Pillow>=9.0.0
+setuptools>=60.0.0
+transformers>=4.30.0
+torch>=1.12.0
