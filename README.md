@@ -35,12 +35,14 @@ pip install -r requirements.txt
 ### Initialize Agent
 
 ```python
-from Agent.CodeAgent import CodeAgent        # v1
-from Agent.CodeAgentV2 import CodeAgent      # v2
-from Agent.CodeAgentV3 import CodeAgent      # v3
+from Agent.CodeAgent import CodeAgent
 
-# Example: Initialize with Proplexity API
-agent = CodeAgent("<apikey>")
+agent = CodeAgent(
+    provider="local",
+    local_fn=generate,
+    attempt_limit=10
+)
+
 ```
 
 ## 🧑‍💻 Versions
